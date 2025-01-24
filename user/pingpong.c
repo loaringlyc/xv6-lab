@@ -29,17 +29,35 @@ main(int argc, char *argv[])
 
   if (pid == 0){
     close(pipefd_foo[1]);
-    read(pipefd_foo[0], buf_bar, 1);
+    if(read(pipefd_foo[0], buf_bar, 1) != 1)
+		{
+			fprintf(2, "failed to read in child\n");
+			exit(1);
+		}
     printf("%d: received ping\n", getpid());
-    close(pipefd_foo[0]);
+    if(write(pipefd_bar[1], &msg, 1) != 1)
+		{
+			fprintf(2, "failed to write in child\n");
+			exit(1);
+		}
+    close(pipefd_foo[1]);
   } else {
     close(pipefd_foo[0]); // close read
-    write(pipefd_foo[1], &msg, 1);
+    if(write(pipefd_foo[1], &msg, 1) != 1)
+		{
+			fprintf(2, "failed to write in parent\n");
+			exit(1);
+		}
     close(pipefd_foo[1]); // close write
-    wait(0);
+    // wait(0); //不wait也没事，因为读和写都是阻塞的
     close(pipefd_bar[1]); 
-    read(pipefd_bar[0], buf_foo, 1);
+    if(read(pipefd_bar[0], buf_foo, 1) != 1)
+		{
+			fprintf(2, "failed to read in parent\n");
+			exit(1);
+		}
     printf("%d: received pong\n", getpid());
+    close(pipefd_bar[0]);
   }
   exit(0);
 }
