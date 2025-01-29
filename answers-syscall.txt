@@ -1,0 +1,11 @@
+1. usertrap() called syscall()
+2. `p /x *p` helps type content of *p
+   `p /x *p.trapframe` or `p /x p.trapframe.a7` = 7
+   represent the system call code
+3. `p /x $sstatus` gets 0x200000022, 0 means it's in S-mode
+4. lw	a3,0(zero) # 0 <_entry-0x80000000>
+    Address 0 in kernel address space has not been mapped to a physical address.
+    sstatus = 0xd -> same meaning
+5. name: "initcode\000\000\000\000\000\000\000"
+   process id: 1
+
