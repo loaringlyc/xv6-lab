@@ -5,7 +5,7 @@
 2. Memory layout of xv6
    <img src="https://p.ipic.vip/tntc6c.png" style="width: 40%;">
    <img src="https://p.ipic.vip/bi1vsg.png" style="width: 100%;">
-   - User and kernel share the same VA space
+   - User and kernel do not share the same VA space
    - kernel space
      - kernel stack starts at `0x80000000` address (0~80000000 has IO devices)
      - `entry.S`: Very first boot instructions
