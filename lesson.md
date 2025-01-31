@@ -3,8 +3,8 @@
    1. This is because the asm codes in `usys.pl` do nothing about arguments
    2. The argument should be dealt in the functions in `sysproc.c`
 2. Memory layout of xv6
-   <img src="https://p.ipic.vip/tntc6c.png" style="width: 40%;">
    <img src="https://p.ipic.vip/bi1vsg.png" style="width: 100%;">
+   <img src="https://p.ipic.vip/e3yzh5.png" style="width: 80%;">
    - User and kernel do not share the same VA space
    - kernel space
      - kernel stack starts at `0x80000000` address (0~80000000 has IO devices)
