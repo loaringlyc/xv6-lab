@@ -40,3 +40,6 @@
      - Note: the addresses in the ELF file may refer to the kernel accidentally or on purpose
 
 ### Programming
+1. Each page table contains 512 ptes
+2. How to decide whether a page directory is the final level: not read/write/executable
+3. How to decide virtual address of a page? In programming it
