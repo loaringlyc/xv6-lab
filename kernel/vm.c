@@ -489,7 +489,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 
 #ifdef LAB_PGTBL
 void
-vmprint(pagetable_t pagetable, int level) {
+vmprint(pagetable_t pagetable, int level, uint64 base) {
   if(level == 1){
     printf("page table %p\n", pagetable);
   }
@@ -499,11 +499,20 @@ vmprint(pagetable_t pagetable, int level) {
       uint64 pa = PTE2PA(pte);
       for(int j = 0; j < level; j++)
         printf(" ..");
-      printf("%p: pte %p pa %p\n", (void *)((uint64)i * PGSIZE + (uint64)pagetable), (void *)(pte), (void *)(pa));
-      vmprint((pagetable_t)(pa), level + 1);
+      uint64 va = 0;
+      if(level == 1){
+        va = (uint64)i << 30;
+      }else if(level == 2){
+        va = base + ((uint64)i << 21);
+      }else{
+        va = base + ((uint64)i << 12);
+      }
+      printf("%p: pte %p pa %p\n", (void *)(va), (void *)(pte), (void *)(pa));
+      vmprint((pagetable_t)(pa), level + 1, va);
     }else if(pte & PTE_V){
       uint64 pa = PTE2PA(pte);
-      printf(" .. .. ..%p: pte %p pa %p\n", (void *)((uint64)i * PGSIZE + (uint64)pagetable), (void *)(pte), (void *)(pa));
+      uint64 va = base + ((uint64)i << 12);
+      printf(" .. .. ..%p: pte %p pa %p\n", (void *)(va), (void *)(pte), (void *)(pa));
     }
   }
 }
