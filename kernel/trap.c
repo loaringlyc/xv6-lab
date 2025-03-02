@@ -77,8 +77,26 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    int intvl = p->alarmintvl;
+    int *ticks = &(p->ticks);
+    // printf("%d %d\n", intvl, *ticks);
+
+    if(intvl == 0)
+      ;
+    else if(*ticks >= intvl - 1){
+      if(p->insig == 0){
+        *p->savedframe = *p->trapframe;
+        p->trapframe->epc = (uint64)(p->alarmhdler);
+        p->insig = 1;
+      }
+      // p->trapframe->epc = (uint64)(p->alarmhdler);
+      *ticks = 0;
+    }else{
+      (*ticks)++;
+    }
     yield();
+  }
 
   usertrapret();
 }

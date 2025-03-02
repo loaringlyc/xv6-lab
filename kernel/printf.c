@@ -176,3 +176,20 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+void backtrace(void)
+{
+  uint64 ret, prev_fp, curr_fp;
+  uint64 page_bottom;
+
+  printf("backtrace:\n");
+  curr_fp = r_fp();
+  page_bottom = PGROUNDDOWN(curr_fp); // omit last 12 bits
+  while (page_bottom == PGROUNDDOWN(curr_fp)) {
+    ret = *(pte_t *)(curr_fp - 0x8);
+    prev_fp = *(pte_t *)(curr_fp - 0x10);
+
+    printf("%p\n", (void *)ret);
+    curr_fp = prev_fp;
+  }
+}

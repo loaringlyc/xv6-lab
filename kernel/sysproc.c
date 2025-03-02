@@ -57,6 +57,7 @@ sys_sleep(void)
   argint(0, &n);
   if(n < 0)
     n = 0;
+  backtrace();
   acquire(&tickslock);
   ticks0 = ticks;
   while(ticks - ticks0 < n){
@@ -90,4 +91,29 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64 
+sys_sigalarm(void)
+{
+  int ticks; 
+  void (*handler)();
+
+  argint(0, &ticks);
+  argaddr(1, (uint64 *)&handler);
+  // printf("ticks: %d\n", ticks);
+  // printf("handler: %p\n", handler);
+  struct proc *p = myproc();
+  p->alarmintvl = ticks;
+  p->alarmhdler = handler;
+  return 0;
+}
+
+uint64 
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+  *p->trapframe= *p->savedframe;
+  p->insig = 0;
+  return p->savedframe->a0;
 }
