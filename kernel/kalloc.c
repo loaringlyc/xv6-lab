@@ -23,6 +23,8 @@ struct {
   struct run *freelist;
 } kmem;
 
+int cowcount[PHYSTOP >> PGSHIFT];
+
 void
 kinit()
 {
@@ -47,9 +49,20 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  int *remain;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
+
+  acquire(&kmem.lock);
+  remain = &cowcount[PA2INDEX(pa)];
+  if(*remain > 0) // 防止第一次初始化remain变为负数
+    *remain = *remain - 1; 
+  release(&kmem.lock);
+
+  if(*remain > 0){ // 仍有引用
+    return;
+  } 
 
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
@@ -72,11 +85,28 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    // cowcount[PA2INDEX((uint64)r)] = 1; 
+    // 不要在这里加cowcount，这里还不一定可以分配成功
+  }
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    acquire(&kmem.lock);
+    cowcount[PA2INDEX((uint64)r)] = 1; 
+    release(&kmem.lock);
+  }
   return (void*)r;
+}
+
+void 
+addcount(uint64 pa)
+{
+  if(pa > PHYSTOP)
+    panic("addcount: physical address too large");
+  acquire(&kmem.lock);
+  cowcount[PA2INDEX(pa)]++;
+  release(&kmem.lock);
 }

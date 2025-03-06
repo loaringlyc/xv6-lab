@@ -65,7 +65,16 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if(r_scause() == 15){ // 试图写一个未映射/不可写的内存页
+    uint64 va = r_stval();
+    pagetable_t pagetable = p->pagetable; //kernel的存储在trapframe的kernel_satp里面，这个仍然是user的
+    // pte_t *pte = walk();
+    if(cowalloc(pagetable, va) == -1){
+      printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+      setkilled(p);
+    }
+  }else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);

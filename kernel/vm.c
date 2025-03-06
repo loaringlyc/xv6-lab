@@ -315,28 +315,59 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
+    if((pte = walk(old, i, 0)) == 0)   // pte为old表中的一条数据指针
       panic("uvmcopy: pte should exist");
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
+    if((*pte & PTE_W) | (*pte & PTE_C)){ // 一开始是可以写的，或者是一个cow可写页
+      *pte = (*pte | PTE_C) & (~PTE_W);  // 一开始就可写，要变为不可写
+      flags = (flags & (~PTE_W)) | PTE_C;
     }
+
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) //直接映射到pa
+      goto err;
+    
+    addcount(pa); // 共享这一页（只可读也是共享）
   }
   return 0;
 
  err:
   uvmunmap(new, 0, i / PGSIZE, 1);
   return -1;
+}
+
+int cowalloc(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte;
+  uint64 pa;
+  int flags;
+  void *mem;
+
+  if((pte = walk(pagetable, va, 0)) == 0) 
+    panic("uvmcopy: pte should exist");
+  if((*pte & PTE_C) == 0){ // 不是cow页的不复制
+    printf("cowalloc: not cow page\n");
+    return -1;
+  }  
+  flags = (PTE_FLAGS(*pte) | PTE_W) & (~PTE_C); // 可写，并且不是cow page
+  pa = PTE2PA(*pte);
+  if((mem = kalloc()) == 0){
+    printf("cowalloc: alloc fail\n");
+    return -1;
+  }
+  memmove(mem, (void *)pa, PGSIZE);
+  kfree((void *)pa);
+  *pte = (PA2PTE(mem) | flags);
+  // if(mappages(pagetable, PGROUNDDOWN(va), PGSIZE, pa, flags) != 0){
+  //   kfree(mem);
+  //   return -1;  
+  // } 不能直接mappage，这个是用来map没有分配过地址的
+
+  return 0;
 }
 
 // mark a PTE invalid for user access.
@@ -360,20 +391,35 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
   pte_t *pte;
+  int flags;
+  void *mem;
 
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     if(va0 >= MAXVA)
       return -1;
     pte = walk(pagetable, va0, 0);
-    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0 ||
-       (*pte & PTE_W) == 0)
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;
+    if(((*pte & PTE_C) | (*pte & PTE_W)) == 0)
       return -1;
     pa0 = PTE2PA(*pte);
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
-    memmove((void *)(pa0 + (dstva - va0)), src, n);
+    if((*pte & PTE_W)){ // 只有一个人使用，随便写
+      memmove((void *)(pa0 + (dstva - va0)), src, n);
+    } else{
+      if((mem = kalloc()) == 0){
+        printf("copyout: alloc fail\n");
+        return -1;
+      }
+      flags = (PTE_FLAGS(*pte) | PTE_W) & (~PTE_C);
+      memmove(mem, (void *)pa0, PGSIZE);
+      memmove((void *)(mem + (dstva - va0)), src, n);
+      kfree((void*)pa0);
+      *pte = (PA2PTE(mem) | flags);
+    }
 
     len -= n;
     src += n;
