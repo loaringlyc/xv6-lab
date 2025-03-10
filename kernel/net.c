@@ -10,6 +10,9 @@
 #include "file.h"
 #include "net.h"
 
+#define MAX_PORTS 16
+#define MAX_QUEUE_SIZE 32
+
 // xv6's ethernet and IP addresses
 static uint8 local_mac[ETHADDR_LEN] = { 0x52, 0x54, 0x00, 0x12, 0x34, 0x56 };
 static uint32 local_ip = MAKE_IP_ADDR(10, 0, 2, 15);
@@ -17,12 +20,32 @@ static uint32 local_ip = MAKE_IP_ADDR(10, 0, 2, 15);
 // qemu host's ethernet address.
 static uint8 host_mac[ETHADDR_LEN] = { 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02 };
 
+struct packet {
+  char *buf;
+  int len;
+  uint32 src_ip;
+  uint16 src_port;
+};
+
+struct portpktq {
+  int port;
+  struct packet pkts[MAX_QUEUE_SIZE];
+  int head;
+  int tail;
+  int size;
+};
+
+static struct portpktq ports[MAX_PORTS];
+
 static struct spinlock netlock;
 
 void
 netinit(void)
 {
   initlock(&netlock, "netlock");
+  for (int i = 0; i < MAX_PORTS; i++) {
+    ports[i].port = -1; // -1表示端口未绑定
+  }
 }
 
 
@@ -37,6 +60,22 @@ sys_bind(void)
   //
   // Your code here.
   //
+  int port;
+  argint(0, &port);
+
+  acquire(&netlock);
+  for(int i = 0; i < MAX_PORTS; i++){
+    if (ports[i].port == -1) {
+      ports[i].port = port;
+      ports[i].head = 0;
+      ports[i].tail = 0;
+      ports[i].size = 0;
+
+      release(&netlock);
+      return 0;
+    }
+  }
+  release(&netlock);
 
   return -1;
 }
@@ -52,8 +91,22 @@ sys_unbind(void)
   //
   // Optional: Your code here.
   //
+  int port;
+  argint(0, &port);
 
-  return 0;
+  acquire(&netlock);
+  for (int i = 0; i < MAX_PORTS; i++) {
+    if (ports[i].port == port) {
+      ports[i].port = -1;
+      ports[i].head = 0;
+      ports[i].tail = 0;
+      ports[i].size = 0;
+      release(&netlock);
+      return 0;
+    }
+  }
+  release(&netlock);
+  return -1; // 未找到绑定的端口
 }
 
 //
@@ -74,9 +127,15 @@ sys_unbind(void)
 uint64
 sys_recv(void)
 {
-  //
-  // Your code here.
-  //
+  int dport, maxlen;
+  uint64 src, sport, buf;
+  argint(0, &dport);
+  argaddr(1, &src);
+  argaddr(2, &sport);
+  argaddr(3, &buf);
+  argint(4, &maxlen);
+
+  
   return -1;
 }
 
@@ -191,7 +250,7 @@ ip_rx(char *buf, int len)
   //
   // Your code here.
   //
-  
+
 }
 
 //
