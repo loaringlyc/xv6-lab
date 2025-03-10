@@ -95,13 +95,30 @@ int
 e1000_transmit(char *buf, int len)
 {
   //
-  // Your code here.
-  //
   // buf contains an ethernet frame; program it into
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after send completes.
   //
+  acquire(&e1000_lock);
+  int i = regs[E1000_TDT];
+  if (!(tx_ring[i].status & E1000_TXD_STAT_DD)) { // 没有结束当前的
+    release(&e1000_lock);
+    return -1;
+  }
+  if (tx_bufs[i])
+    kfree(tx_bufs[i]);
 
+  tx_bufs[i] = kalloc(); // 新分配一页
+
+  memmove(tx_bufs[i], buf, len);
+  // memset(&tx_ring[i], 0, sizeof(tx_ring[i]));
+  tx_ring[i].addr = (uint64)tx_bufs[i];
+  tx_ring[i].length = len;
+  tx_ring[i].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+  tx_ring[i].status = E1000_TXD_STAT_DD;
+
+  regs[E1000_TDT] = (regs[E1000_TDT] + 1) % TX_RING_SIZE;
+  release(&e1000_lock);
   
   return 0;
 }
@@ -110,12 +127,27 @@ static void
 e1000_recv(void)
 {
   //
-  // Your code here.
-  //
   // Check for packets that have arrived from the e1000
   // Create and deliver a buf for each packet (using net_rx()).
   //
+  while(1){
+    acquire(&e1000_lock);
+    int i = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+    
+    if(!(rx_ring[i].status & E1000_RXD_STAT_DD)) {
+      release(&e1000_lock);
+      return;
+    }
 
+    // printf("EOP: %d\n", rx_ring[i].status);
+    net_rx(rx_bufs[i], strlen(rx_bufs[i]));
+    rx_bufs[i] = kalloc();
+    rx_ring[i].addr = (uint64)rx_bufs[i];
+    rx_ring[i].status = 0;
+    regs[E1000_RDT] = i;
+    release(&e1000_lock);
+  }
+  return;
 }
 
 void
