@@ -141,6 +141,8 @@ e1000_recv(void)
 
     // printf("EOP: %d\n", rx_ring[i].status);
     net_rx(rx_bufs[i], strlen(rx_bufs[i]));
+    if(rx_bufs[i])
+      kfree(rx_bufs[i]);
     rx_bufs[i] = kalloc();
     rx_ring[i].addr = (uint64)rx_bufs[i];
     rx_ring[i].status = 0;

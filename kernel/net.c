@@ -32,7 +32,7 @@ struct portpktq {
   struct packet pkts[MAX_QUEUE_SIZE];
   int head;
   int tail;
-  int size;
+  int size; // 这个似乎没用，没有修改head的方法；需要借鉴sleep进行修改。
 };
 
 static struct portpktq ports[MAX_PORTS];
@@ -238,6 +238,7 @@ sys_send(void)
   return 0;
 }
 
+// deal with udp packets
 void
 ip_rx(char *buf, int len)
 {
@@ -250,7 +251,25 @@ ip_rx(char *buf, int len)
   //
   // Your code here.
   //
+  struct eth *ineth = (struct eth *) buf;
+  struct ip *inip = (struct ip *) (ineth + 1);
+  struct udp *inudp = (struct udp *) (inip + 1);
+  
+  acquire(&netlock);
+  for (int i = 0; i < MAX_PORTS; i++) {
+    if (ports[i].port == ntohs(inudp->dport)) { //注意存储的大小端
+      if (ports[i].size == MAX_QUEUE_SIZE) {
+        release(&netlock);
+        kfree(buf);
+        return; // 队列已满，丢弃数据包
+      }
 
+      struct portpktq *portq = &ports[i];
+      struct packet *pkt = &portq->pkts[portq->tail];
+    }
+  }
+  release(&netlock);
+  kfree(buf); // 未找到绑定的端口，丢弃数据包
 }
 
 //
