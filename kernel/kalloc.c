@@ -10,6 +10,7 @@
 #include "defs.h"
 
 void freerange(void *pa_start, void *pa_end);
+struct run* steal(int cpuid);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
@@ -81,11 +82,17 @@ kalloc(void)
   int id;
   struct run *r;
 
-  push_off();
+  push_off(); // in case CPUID changes
   id = cpuid();
 
   acquire(&kmem[id].lock);
   r = kmem[id].freelist;
+  if(!r){ // if no free page, try stealing first
+    release(&kmem[id].lock);
+    r = steal(id);
+    acquire(&kmem[id].lock);
+    kmem[id].freelist = r;
+  }
   if(r)
     kmem[id].freelist = r->next;
   release(&kmem[id].lock);
@@ -94,4 +101,42 @@ kalloc(void)
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
   return (void*)r;
+}
+
+// steal free pages from other CPU for CPU of cpuid
+struct run*
+steal(int cpuid)
+{
+  struct run *slow, *fast, *head;
+
+  for(int i = 0; i<NCPU; i++){
+    if(i == cpuid){
+      continue;
+    }
+    acquire(&kmem[i].lock); // 访问也需要锁，防止在访问的时候别人改了
+    if(!kmem[i].freelist){
+      release(&kmem[i].lock);
+      continue;
+    }
+    slow = kmem[i].freelist;
+    fast = kmem[i].freelist;
+    
+    // 如果只有一页/两页，两个都在表头
+    // 如果有三/四页，slow在第二页，fast在第三页
+    while(fast && fast->next){ 
+      slow = slow->next;
+      fast = fast->next->next;
+    } 
+    if (slow == fast) { // 链表中只有一个节点
+      head = kmem[i].freelist;
+      kmem[i].freelist = 0;
+      release(&kmem[i].lock);
+      return head;
+    }
+    head = slow->next;
+    slow->next = 0;
+    release(&kmem[i].lock);
+    return head;
+  }
+  return 0;
 }
