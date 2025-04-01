@@ -22,7 +22,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem[NCPU];
+} kmems[NCPU];
 
 void
 kinit()
@@ -31,7 +31,7 @@ kinit()
 
   for(int i = 0; i < NCPU; i++){
     snprintf(lockname, sizeof(lockname), "kmem%d", i); // give name to each lock
-    initlock(&kmem[i].lock, lockname);  
+    initlock(&kmems[i].lock, lockname);  
   }
   freerange(end, (void*)PHYSTOP);
 }
@@ -66,10 +66,10 @@ kfree(void *pa)
   push_off();
   id = cpuid();
 
-  acquire(&kmem[id].lock);
-  r->next = kmem[id].freelist;
-  kmem[id].freelist = r;
-  release(&kmem[id].lock);
+  acquire(&kmems[id].lock);
+  r->next = kmems[id].freelist;
+  kmems[id].freelist = r;
+  release(&kmems[id].lock);
   pop_off();
 }
 
@@ -85,17 +85,17 @@ kalloc(void)
   push_off(); // in case CPUID changes
   id = cpuid();
 
-  acquire(&kmem[id].lock);
-  r = kmem[id].freelist;
+  acquire(&kmems[id].lock);
+  r = kmems[id].freelist;
   if(!r){ // if no free page, try stealing first
-    release(&kmem[id].lock);
+    release(&kmems[id].lock);
     r = steal(id);
-    acquire(&kmem[id].lock);
-    kmem[id].freelist = r;
+    acquire(&kmems[id].lock);
+    kmems[id].freelist = r;
   }
   if(r)
-    kmem[id].freelist = r->next;
-  release(&kmem[id].lock);
+    kmems[id].freelist = r->next;
+  release(&kmems[id].lock);
   pop_off();
 
   if(r)
@@ -113,29 +113,28 @@ steal(int cpuid)
     if(i == cpuid){
       continue;
     }
-    acquire(&kmem[i].lock); // 访问也需要锁，防止在访问的时候别人改了
-    if(!kmem[i].freelist){
-      release(&kmem[i].lock);
+    acquire(&kmems[i].lock); // 访问也需要锁，防止在访问的时候别人改了
+    if(!kmems[i].freelist){
+      release(&kmems[i].lock);
       continue;
     }
-    slow = kmem[i].freelist;
-    fast = kmem[i].freelist;
+    slow = kmems[i].freelist;
+    fast = kmems[i].freelist->next;
     
-    // 如果只有一页/两页，两个都在表头
-    // 如果有三/四页，slow在第二页，fast在第三页
+    // 如果只有一页/两页，slow在表头，fast在第一页的next
+    // 如果有三/四页，slow在第二页，fast在第三页的next
     while(fast && fast->next){ 
       slow = slow->next;
       fast = fast->next->next;
     } 
-    if (slow == fast) { // 链表中只有一个节点
-      head = kmem[i].freelist;
-      kmem[i].freelist = 0;
-      release(&kmem[i].lock);
-      return head;
-    }
-    head = slow->next;
-    slow->next = 0;
-    release(&kmem[i].lock);
+    head = slow->next; // 返回值为slow的下一个
+    slow->next = 0;    // 将链表断开
+    if(!head){ // 如果只剩一页了（测试里面是一个常见情况）
+      head = slow;
+      kmems[i].freelist = 0;
+    } 
+    release(&kmems[i].lock);
+
     return head;
   }
   return 0;
