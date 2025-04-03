@@ -7,6 +7,6 @@ struct buf {
   uint refcnt;
   struct buf *next;
   uchar data[BSIZE];
-  uint timestamp;
+  uint ticks;
 };
 
