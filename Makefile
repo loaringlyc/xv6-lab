@@ -257,14 +257,14 @@ endif
 
 ifeq ($(LAB),fs)
 UPROGS += \
-	$U/_bigfile
+	$U/_bigfile \
+	$U/_symlinktest
 endif
 
 
 ifeq ($(LAB),mmap)
 UPROGS += \
-	$U/_mmaptest \
-	$U/_symlinktest
+	$U/_mmaptest 
 endif
 
 ifeq ($(LAB),net)

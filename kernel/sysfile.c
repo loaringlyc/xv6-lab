@@ -507,5 +507,10 @@ sys_pipe(void)
 uint64 
 sys_symlink(void)
 {
+  char *target, *path;
+  argaddr(0, target);
+  argaddr(1, path);
+
+  
   return 0;
 }
